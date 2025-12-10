@@ -1,115 +1,34 @@
-"""
-2D Grid Ecosystem Simulation with Obstacles.
-
-Herbivores eat plants, carnivores eat herbivores, plants regrow, and animals
-lose energy over time. Obstacles block movement and placement.
-
-Run: python main.py
-"""
-
 from __future__ import annotations
 
-import os
 import random
-import time
-from dataclasses import dataclass
 from typing import Iterable, List, Optional, Set, Tuple
 
-# --------------------------- Configuration --------------------------- #
+from config import (
+    GRID_WIDTH,
+    GRID_HEIGHT,
+    INITIAL_HERBIVORES,
+    INITIAL_CARNIVORES,
+    INITIAL_PLANTS,
+    OBSTACLE_DENSITY,
+    ENERGY_GAIN_FROM_PLANT,
+    ENERGY_GAIN_FROM_PREY,
+    HERB_REPRODUCTION_THRESHOLD,
+    HERB_REPRODUCTION_COST,
+    HERB_REPRODUCTION_PROBABILITY,
+    CARN_REPRODUCTION_THRESHOLD,
+    CARN_REPRODUCTION_COST,
+    CARN_REPRODUCTION_PROBABILITY,
+    PLANT_REGROWTH_PROBABILITY,
+    EMPTY_SYMBOL,
+    PLANT_SYMBOL,
+    OBSTACLE_SYMBOL,
+    HORIZONTAL_BORDER_CHAR,
+    VERTICAL_BORDER_CHAR,
+    Position,
+    color_symbol,
+)
+from entities import Herbivore, Carnivore
 
-GRID_WIDTH = 20
-GRID_HEIGHT = 20
-
-# --- POPULATION SIZES --- #
-INITIAL_HERBIVORES = 22
-INITIAL_CARNIVORES = 6
-INITIAL_PLANTS = 35
-
-OBSTACLE_DENSITY = 0.07
-
-# --- ENERGY SYSTEM --- #
-ENERGY_GAIN_FROM_PLANT = 5
-ENERGY_GAIN_FROM_PREY = 18
-ENERGY_COST_PER_TURN = 1
-
-# --- HERBIVORE REPRODUCTION --- #
-HERB_REPRODUCTION_THRESHOLD = 14
-HERB_REPRODUCTION_COST = 6
-HERB_REPRODUCTION_PROBABILITY = 0.30
-
-# --- CARNIVORE REPRODUCTION --- #
-CARN_REPRODUCTION_THRESHOLD = 12
-CARN_REPRODUCTION_COST = 5
-CARN_REPRODUCTION_PROBABILITY = 0.40
-
-# --- PLANTS --- #
-PLANT_REGROWTH_PROBABILITY = 0.025
-
-STEP_DELAY_SECONDS = .2
-TOTAL_STEPS = 200
-RANDOM_SEED = 42
-
-# Symbols
-EMPTY_SYMBOL = "."
-HERB_SYMBOL = "H"
-CARN_SYMBOL = "C"
-PLANT_SYMBOL = "*"
-OBSTACLE_SYMBOL = "#"
-HORIZONTAL_BORDER_CHAR = "-"
-VERTICAL_BORDER_CHAR = "|"
-
-# ANSI colors
-RESET = "\033[0m"
-COLOR_HERB = "\033[97m"     # bright white
-COLOR_CARN = "\033[91m"     # bright red
-COLOR_PLANT = "\033[92m"    # bright green
-COLOR_OBSTACLE = "\033[94m" # bright blue
-
-
-def color_symbol(symbol: str) -> str:
-    if symbol == HERB_SYMBOL:
-        return f"{COLOR_HERB}{symbol}{RESET}"
-    if symbol == CARN_SYMBOL:
-        return f"{COLOR_CARN}{symbol}{RESET}"
-    if symbol == PLANT_SYMBOL:
-        return f"{COLOR_PLANT}{symbol}{RESET}"
-    if symbol == OBSTACLE_SYMBOL:
-        return f"{COLOR_OBSTACLE}{symbol}{RESET}"
-    return symbol
-
-
-Position = Tuple[int, int]
-
-
-# --------------------------- Data Structures --------------------------- #
-
-@dataclass
-class Animal:
-    id: int
-    x: int
-    y: int
-    energy: int
-
-    @property
-    def pos(self) -> Position:
-        return (self.x, self.y)
-
-    def step_energy_cost(self) -> None:
-        self.energy -= ENERGY_COST_PER_TURN
-
-    def is_alive(self) -> bool:
-        return self.energy > 0
-
-
-class Herbivore(Animal):
-    symbol = HERB_SYMBOL
-
-
-class Carnivore(Animal):
-    symbol = CARN_SYMBOL
-
-
-# --------------------------- World Class --------------------------- #
 
 class World:
     def __init__(self, width: int, height: int):
@@ -149,7 +68,11 @@ class World:
             self.carnivores.append(Carnivore(self._next_id, pos[0], pos[1], energy))
         self._next_id += 1
 
-    def _random_empty_positions(self, count: int, forbidden: Iterable[Position] = ()) -> List[Position]:
+    def _random_empty_positions(
+        self,
+        count: int,
+        forbidden: Iterable[Position] = (),
+    ) -> List[Position]:
         taken = (
             self.obstacles
             | self.plants
@@ -189,21 +112,29 @@ class World:
                 carn.x, carn.y = target
 
     def _choose_move_for_herbivore(self, herb: Herbivore) -> Optional[Position]:
-        neighbors = self._free_neighbors(herb.pos, blocked=self.obstacles | {
-            h.pos for h in self.herbivores if h.id != herb.id
-        })
+        neighbors = self._free_neighbors(
+            herb.pos,
+            blocked=self.obstacles
+            | {h.pos for h in self.herbivores if h.id != herb.id},
+        )
 
         plant_cells = [p for p in neighbors if p in self.plants]
         if plant_cells:
             return random.choice(plant_cells)
 
         safe_neighbors = [p for p in neighbors if p not in {c.pos for c in self.carnivores}]
-        return random.choice(safe_neighbors) if safe_neighbors else (random.choice(neighbors) if neighbors else None)
+        return (
+            random.choice(safe_neighbors)
+            if safe_neighbors
+            else (random.choice(neighbors) if neighbors else None)
+        )
 
     def _choose_move_for_carnivore(self, carn: Carnivore) -> Optional[Position]:
-        neighbors = self._free_neighbors(carn.pos, blocked=self.obstacles | {
-            c.pos for c in self.carnivores if c.id != carn.id
-        })
+        neighbors = self._free_neighbors(
+            carn.pos,
+            blocked=self.obstacles
+            | {c.pos for c in self.carnivores if c.id != carn.id},
+        )
 
         prey_cells = [p for p in neighbors if p in {h.pos for h in self.herbivores}]
         if prey_cells:
@@ -225,7 +156,9 @@ class World:
             if prey:
                 self.herbivores.remove(prey)
                 carn.energy += ENERGY_GAIN_FROM_PREY
-                logs.append(f"Carnivore #{carn.id} ate Herbivore #{prey.id} at {carn.pos}.")
+                logs.append(
+                    f"Carnivore #{carn.id} ate Herbivore #{prey.id} at {carn.pos}."
+                )
 
     # -------- Energy & Cleanup -------- #
 
@@ -249,26 +182,40 @@ class World:
     # -------- Reproduction -------- #
 
     def handle_reproduction(self, logs: List[str]) -> None:
-        new_herbivores = []
+        new_herbivores: List[Herbivore] = []
         for herb in self.herbivores:
-            if herb.energy >= HERB_REPRODUCTION_THRESHOLD and random.random() < HERB_REPRODUCTION_PROBABILITY:
+            if (
+                herb.energy >= HERB_REPRODUCTION_THRESHOLD
+                and random.random() < HERB_REPRODUCTION_PROBABILITY
+            ):
                 pos = self._empty_neighbor(herb.pos)
                 if pos:
                     herb.energy -= HERB_REPRODUCTION_COST
-                    baby = Herbivore(self._next_id, pos[0], pos[1],
-                                     energy=HERB_REPRODUCTION_THRESHOLD // 2)
+                    baby = Herbivore(
+                        self._next_id,
+                        pos[0],
+                        pos[1],
+                        energy=HERB_REPRODUCTION_THRESHOLD // 2,
+                    )
                     self._next_id += 1
                     new_herbivores.append(baby)
                     logs.append(f"Herbivore #{herb.id} reproduced (#{baby.id}) at {pos}.")
 
-        new_carnivores = []
+        new_carnivores: List[Carnivore] = []
         for carn in self.carnivores:
-            if carn.energy >= CARN_REPRODUCTION_THRESHOLD and random.random() < CARN_REPRODUCTION_PROBABILITY:
+            if (
+                carn.energy >= CARN_REPRODUCTION_THRESHOLD
+                and random.random() < CARN_REPRODUCTION_PROBABILITY
+            ):
                 pos = self._empty_neighbor(carn.pos)
                 if pos:
                     carn.energy -= CARN_REPRODUCTION_COST
-                    baby = Carnivore(self._next_id, pos[0], pos[1],
-                                     energy=CARN_REPRODUCTION_THRESHOLD // 2)
+                    baby = Carnivore(
+                        self._next_id,
+                        pos[0],
+                        pos[1],
+                        energy=CARN_REPRODUCTION_THRESHOLD // 2,
+                    )
                     self._next_id += 1
                     new_carnivores.append(baby)
                     logs.append(f"Carnivore #{carn.id} reproduced (#{baby.id}) at {pos}.")
@@ -303,13 +250,22 @@ class World:
     def _neighbors(self, pos: Position) -> List[Position]:
         x, y = pos
         candidates = [(x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)]
-        return [(nx, ny) for (nx, ny) in candidates if 0 <= nx < self.width and 0 <= ny < self.height]
+        return [
+            (nx, ny)
+            for (nx, ny) in candidates
+            if 0 <= nx < self.width and 0 <= ny < self.height
+        ]
 
     def _free_neighbors(self, pos: Position, blocked: Set[Position]) -> List[Position]:
         return [p for p in self._neighbors(pos) if p not in blocked]
 
     def _empty_neighbor(self, pos: Position) -> Optional[Position]:
-        occupied = self.obstacles | self.plants | {h.pos for h in self.herbivores} | {c.pos for c in self.carnivores}
+        occupied = (
+            self.obstacles
+            | self.plants
+            | {h.pos for h in self.herbivores}
+            | {c.pos for c in self.carnivores}
+        )
         candidates = [p for p in self._neighbors(pos) if p not in occupied]
         return random.choice(candidates) if candidates else None
 
@@ -329,9 +285,9 @@ class World:
         for x, y in self.plants:
             grid[y][x] = PLANT_SYMBOL
         for herb in self.herbivores:
-            grid[herb.y][herb.x] = HERB_SYMBOL
+            grid[herb.y][herb.x] = Herbivore.symbol
         for carn in self.carnivores:
-            grid[carn.y][carn.x] = CARN_SYMBOL
+            grid[carn.y][carn.x] = Carnivore.symbol
 
         content_width = self.width * 2 - 1
         border = HORIZONTAL_BORDER_CHAR * (content_width + 2)
@@ -343,62 +299,3 @@ class World:
             lines.append(f"{VERTICAL_BORDER_CHAR}{row_str}{VERTICAL_BORDER_CHAR}")
         lines.append(border)
         return "\n".join(lines)
-
-
-# --------------------------- Simulation Loop --------------------------- #
-
-def clear_screen() -> None:
-    os.system("cls" if os.name == "nt" else "clear")
-
-
-def print_legend() -> None:
-    print(
-        "Legend: "
-        f"{EMPTY_SYMBOL}=empty  "
-        f"{color_symbol(HERB_SYMBOL)}=herbivore  "
-        f"{color_symbol(CARN_SYMBOL)}=carnivore  "
-        f"{color_symbol(PLANT_SYMBOL)}=plant  "
-        f"{color_symbol(OBSTACLE_SYMBOL)}=obstacle"
-    )
-
-
-def run_simulation() -> None:
-    if RANDOM_SEED is not None:
-        random.seed(RANDOM_SEED)
-
-    world = World(GRID_WIDTH, GRID_HEIGHT)
-    world.seed_world()
-
-    print("Starting 2D ecosystem simulation...")
-    print_legend()
-    time.sleep(1)
-
-    for step in range(1, TOTAL_STEPS + 1):
-        logs: List[str] = []
-        clear_screen()
-        print(f"Step {step}")
-        print(world.render())
-        print(
-            f"Herbivores: {len(world.herbivores)} | "
-            f"Carnivores: {len(world.carnivores)} | "
-            f"Plants: {len(world.plants)} | "
-            f"Obstacles: {len(world.obstacles)}"
-        )
-        print_legend()
-
-        world.update_world(logs)
-
-        if logs:
-            print("\nEvents:")
-            for entry in logs:
-                print(f"- {entry}")
-
-        if not world.herbivores and not world.carnivores:
-            print("\nAll animals have died out. Simulation ended early.")
-            break
-
-        time.sleep(STEP_DELAY_SECONDS)
-
-
-if __name__ == "__main__":
-    run_simulation()
